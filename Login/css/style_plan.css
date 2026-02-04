@@ -1,0 +1,59 @@
+body {
+  font-family: 'Times New Roman', serif;
+  background-color: #f8f9fa;
+}
+
+.documento {
+  width: 794px;
+  min-height: 1123px;
+  margin: 20px auto;
+  background: white;
+  padding: 60px 50px;
+  border: 1px solid #ccc;
+  box-shadow: 0 0 5px rgba(0,0,0,0.1);
+  position: relative;
+}
+
+.logo-central {
+  display: block;
+  margin: 30px auto 20px;
+  width: 280px !important;
+}
+
+input.form-linea, input.campo-linea {
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 16px;
+  width: 300px;
+  display: inline-block;
+  margin-top: 8px;
+}
+
+.bloque-inferior h4 {
+  margin-bottom: 15px;
+}
+
+.titulo-universidad {
+  margin-top: 140px;
+  text-align: center;
+}
+
+.contenido-lista {
+  text-align: left;
+  margin-top: 60px;
+  font-size: 16px;
+}
+
+.contenido-lista li {
+  margin-bottom: 6px;
+}
+
+.contenido-lista .subitem {
+  margin-left: 20px;
+}
+
+.page-num {
+  float: right;
+  margin-left: 10px;
+}
