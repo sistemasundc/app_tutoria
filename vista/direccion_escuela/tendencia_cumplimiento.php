@@ -31,14 +31,9 @@ $colores_carrera = [1=>'orange',2=>'red',3=>'purple',4=>'#2377e4ff',5=>'green'];
 $color_actual = $colores_carrera[$id_car_sesion] ?? 'blue';
 
 /**
- * ==========================================================
- * AÑO DE INFORME (robusto):
+ * YEAR_EXPR:
  * - si fecha_envio existe => YEAR(fecha_envio)
- * - si NO existe => extrae 20xx desde numero_informe (funciona aunque sea NULL fecha_envio)
- * ==========================================================
- *
- * MySQL 8+: REGEXP_SUBSTR
- * Si tu MySQL es 5.7, dímelo y te lo adapto.
+ * - si no => extrae 20xx desde numero_informe (MySQL 8+)
  */
 $YEAR_EXPR = "
 CASE
@@ -97,22 +92,8 @@ rsort($anios);
 // data inicial
 $data_inicial = obtenerDataPorAnio($cn, (int)$id_car_sesion, (int)$anio_sel, $YEAR_EXPR);
 
-/** endpoint ajax */
-if (isset($_GET['ajax']) && (int)$_GET['ajax'] === 1) {
-  header('Content-Type: application/json; charset=utf-8');
-
-  $anio_ajax = isset($_GET['anio']) ? (int)$_GET['anio'] : $anio_actual;
-  if ($anio_ajax < 2000 || $anio_ajax > ($anio_actual + 1)) $anio_ajax = $anio_actual;
-
-  $data_ajax = obtenerDataPorAnio($cn, (int)$id_car_sesion, $anio_ajax, $YEAR_EXPR);
-
-  echo json_encode([
-    'ok' => true,
-    'anio' => $anio_ajax,
-    'data' => $data_ajax,
-  ], JSON_UNESCAPED_UNICODE);
-  exit;
-}
+// endpoint ajax fijo (mismo folder)
+$ajax_endpoint = '/vista/direccion_escuela/tendencia_cumplimiento_ajax.php';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -120,18 +101,19 @@ if (isset($_GET['ajax']) && (int)$_GET['ajax'] === 1) {
 <meta charset="UTF-8">
 <title>Tendencia de Cumplimiento</title>
 <style>
-body { margin:0; background:#f1f1f1; }
-.contenedor-principal{ width:95%; max-width:1000px; margin:20px auto; background:#fff; border-radius:6px; box-shadow:0 0 5px rgba(0,0,0,.2); overflow:hidden; font-family:Arial,sans-serif; }
-.titulo{ background:#2c3e50; color:#fff; padding:10px 16px; font-weight:bold; text-align:center; font-size:18px; position:relative; }
-.filtro-anio{ position:absolute; right:12px; top:50%; transform:translateY(-50%); display:flex; gap:8px; align-items:center; }
-.filtro-anio label{ font-weight:normal; font-size:12px; color:#fff; opacity:.95; }
-.filtro-anio select{ padding:4px 10px; border-radius:6px; border:1px solid rgba(255,255,255,.6); outline:none; font-size:12px; background:#fff; color:#111; min-width:90px; cursor:pointer; }
-.contenido{ padding:20px; text-align:center; background:#fff; }
-.grafico{ width:100%; aspect-ratio:2/1; margin:0 auto; border:1px solid #ccc; background:#fff; }
-.leyenda{ margin-top:20px; text-align:center; flex-wrap:wrap; }
-.leyenda div{ display:inline-block; margin:5px 10px; font-size:1rem; }
-.leyenda span{ display:inline-block; width:12px; height:12px; margin-right:5px; vertical-align:middle; }
-#estado{ margin-top:10px; font-size:13px; color:#444; display:none; }
+  body { margin:0; background:#f1f1f1; }
+  .contenedor-principal{ width:95%; max-width:1000px; margin:20px auto; background:#fff; border-radius:6px; box-shadow:0 0 5px rgba(0,0,0,.2); overflow:hidden; font-family:Arial,sans-serif; }
+  .titulo{ background:#2c3e50; color:#fff; padding:10px 16px; font-weight:bold; text-align:center; font-size:18px; position:relative; }
+  .filtro-anio{ position:absolute; right:12px; top:50%; transform:translateY(-50%); display:flex; gap:8px; align-items:center; }
+  .filtro-anio label{ font-weight:normal; font-size:12px; color:#fff; opacity:.95; }
+  .filtro-anio select{ padding:4px 10px; border-radius:6px; border:1px solid rgba(255,255,255,.6); outline:none; font-size:12px; background:#fff; color:#111; min-width:90px; cursor:pointer; }
+  .contenido{ padding:20px; text-align:center; background:#fff; }
+  .grafico{ width:100%; aspect-ratio:2/1; margin:0 auto; border:1px solid #ccc; background:#fff; }
+  .leyenda{ margin-top:20px; text-align:center; flex-wrap:wrap; }
+  .leyenda div{ display:inline-block; margin:5px 10px; font-size:1rem; }
+  .leyenda span{ display:inline-block; width:12px; height:12px; margin-right:5px; vertical-align:middle; }
+  #estado{ margin-top:10px; font-size:13px; color:#444; display:none; }
+  #sinDatos{ margin-top:10px; font-size:13px; color:#777; display:none; }
 </style>
 </head>
 <body>
@@ -139,7 +121,6 @@ body { margin:0; background:#f1f1f1; }
 <div class="contenedor-principal">
   <div class="titulo">
     TENDENCIA DE CUMPLIMIENTO - TUTORES DE AULA - <?= htmlspecialchars($nombre_carrera) ?>
-    <span id="anioTitulo"></span>
 
     <div class="filtro-anio">
       <label for="anio">Año:</label>
@@ -154,6 +135,8 @@ body { margin:0; background:#f1f1f1; }
   <div class="contenido">
     <div id="grafico" class="grafico"></div>
     <div id="estado"><strong>Cargando...</strong></div>
+    <div id="sinDatos">No hay registros para el año seleccionado.</div>
+
     <div class="leyenda">
       <div><span style="background:<?= $color_actual ?>"></span><strong><?= htmlspecialchars($nombre_carrera) ?></strong></div>
     </div>
@@ -165,19 +148,32 @@ body { margin:0; background:#f1f1f1; }
   const meses = <?php echo json_encode($meses_ordenados, JSON_UNESCAPED_UNICODE); ?>;
   const color = "<?php echo $color_actual; ?>";
   let datos = <?php echo json_encode($data_inicial, JSON_UNESCAPED_UNICODE); ?>;
-  let anio = <?php echo (int)$anio_sel; ?>;
+  let anio  = <?php echo (int)$anio_sel; ?>;
 
   const sel = document.getElementById('anio');
   const estado = document.getElementById('estado');
-  const anioTitulo = document.getElementById('anioTitulo');
+  const sinDatos = document.getElementById('sinDatos');
+
+  // endpoint fijo y correcto
+  const ENDPOINT = new URL("<?php echo $ajax_endpoint; ?>", window.location.href).toString();
 
   function escX(i, w, p){ return p + i * ((w - 2*p) / (meses.length - 1)); }
   function escY(val, h, p, maxY){ return h - p - (val * (h - 2*p) / maxY); }
+
+  function hayRegistros(obj){
+    if (!obj) return false;
+    for (const k in obj) {
+      if ((obj[k] ?? 0) > 0) return true;
+    }
+    return false;
+  }
 
   function dibujarGrafico() {
     const w = 800, h = 400, p = 40;
     const cont = document.getElementById("grafico");
     cont.innerHTML = "";
+
+    sinDatos.style.display = hayRegistros(datos) ? "none" : "block";
 
     const maxData = Math.max(...meses.map(m => (datos[m] ?? 0)));
     const maxY = Math.max(maxData, 30);
@@ -204,7 +200,7 @@ body { margin:0; background:#f1f1f1; }
 
     // separador semestres
     const idxJulio = meses.indexOf('julio');
-    const idxSept = meses.indexOf('septiembre');
+    const idxSept  = meses.indexOf('septiembre');
     if (idxJulio !== -1 && idxSept !== -1) {
       const xCorte = (escX(idxJulio, w, p) + escX(idxSept, w, p)) / 2;
 
@@ -294,26 +290,27 @@ body { margin:0; background:#f1f1f1; }
 
   async function cargarAnio(nuevoAnio){
     estado.style.display = 'block';
-
-    // Ruta correcta SIEMPRE: el mismo archivo actual
-    const base = window.location.pathname;
-    const url = `${base}?ajax=1&anio=${encodeURIComponent(nuevoAnio)}`;
+    sinDatos.style.display = 'none';
 
     try {
-      const resp = await fetch(url, { method:'GET' });
+      const url = new URL(ENDPOINT);
+      url.searchParams.set("anio", String(nuevoAnio));
+
+      const resp = await fetch(url.toString(), { method:'GET', headers: { 'Accept': 'application/json' } });
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
 
       const json = await resp.json();
       if (!json || json.ok !== true) throw new Error('JSON inválido');
 
-      anio = json.anio;
+      anio  = Number(json.anio);
       datos = json.data || {};
-      anioTitulo.textContent = anio;
 
       dibujarGrafico();
     } catch (e) {
-      console.error(e);
-      // si falla, al menos quita "Cargando..."
+      console.error("Error AJAX:", e);
+      // Si falla, vuelve a dibujar (mantiene el último estado) pero quita "Cargando..."
+      dibujarGrafico();
+      alert("No se pudo cargar la información del año seleccionado. Revisa consola (F12) y la ruta del endpoint.");
     } finally {
       estado.style.display = 'none';
     }
