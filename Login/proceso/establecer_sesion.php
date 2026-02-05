@@ -39,11 +39,11 @@ $_SESSION['S_ROL']         = is_numeric($rol_data['rol']) && isset($mapaRoles[(i
                              ? $mapaRoles[(int)$rol_data['rol']] 
                              : strtoupper(trim($rol_data['rol']));
 $_SESSION['S_ORIGEN']      = $rol_data['fuente'] ?? 'desconocido';
-$_SESSION['S_SEMESTRE']    = 32;
+$_SESSION['S_SEMESTRE']    = 34;
 
 $_SESSION['S_SCHOOL']      = $rol_data['id_car'] ?? '-';
 $_SESSION['S_SCHOOLNAME']  = $rol_data['escuela'] ?? '-';
-$_SESSION['S_SEMESTRE_FECHA'] = '2025-I'; 
+$_SESSION['S_SEMESTRE_FECHA'] = '2026-0'; 
 
 if ($rol_data['rol'] === 'ALUMNO') {
     $_SESSION['S_IDESTU'] = $rol_data['id_general'];
