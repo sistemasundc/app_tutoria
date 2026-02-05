@@ -8,3 +8,6 @@ vendor2/
 Login/proceso/login_google.php
 Login/index.php
 vista/docente/autocompletar_informe_ia.php
+modelo/modelo_conexion.php
+Login/proceso/librerias/pdo_conexion.php
+Login/proceso/librerias/lib_conexion.php
