@@ -1,4 +1,6 @@
-var sem = $('#anio').val();
+function getSemestre(){
+  return $('#anio').val();
+}
 var s_escuela = $("#Uschool").val() || "-";
 var s_nombre_escuela = $("#Unameschool").val() || "-";
 
@@ -78,9 +80,7 @@ function listar_docente() {
         "ajax": {
             "url": "../controlador/coordinador/controlador_listar_docente.php",
             type: 'POST',
-            data: {
-                anio: sem
-            }
+            data: { anio: getSemestre() }
         },
         "columns": [{
             "data": "id_doce_tuto"
@@ -149,7 +149,8 @@ $('#tabla_Docentes').on('click', '.agregar', function () {
         var data = table_docente.row(this).data();
     }
     //alert(data.id_usuario +'--'+data.nombre );
-    $("#id_docent").val(data.id_doce_tuto).trigger("change");
+    const idDocenteReal = data.id_usuario || data.id_doce || data.id_docente || data.id_doce_tuto; 
+    $("#id_docent").val(idDocenteReal).trigger("change");
 
     //listar_combo_niveles();
 
@@ -166,7 +167,8 @@ $('#tabla_Docentes').on('click', '.ver', function () {
         var data = table_docente.row(this).data();
     }
 
-    VerCursos_grados_docente(data.id_doce_tuto);
+    const idDocenteReal = data.id_usuario || data.id_doce || data.id_docente || data.id_doce_tuto;
+    VerCursos_grados_docente(idDocenteReal);
 
 })
 
@@ -308,10 +310,7 @@ function listar_combo_ciclos(id_doce) {
     $.ajax({
         "url": "../controlador/coordinador/controlador_combo_ciclos.php",
         type: 'POST',
-        data: {
-            doce: id_doce,
-            anio: sem
-        }
+        data: { doce: id_doce, anio: getSemestre() }
     }).done(function (resp) {
 
         var data = JSON.parse(resp);
@@ -432,44 +431,64 @@ function remove(t) {
 }
 
 
-function DocentAsignado() {  //TAMBIEN CAMBIA  ESTADO PENDIENTE
-    var idciclos = $('#cicloa').val(); //esto es id_carga 
-    var id_doce = $("#id_docent").val();;
-    var id_coodi = $("#textId").val();
-    var btnsubir = document.getElementById('subirasigbtn');
-    console.log("ZZZZ:");
-    btnsubir.disabled = true;
-    Swal.fire({
-        title: "Mensaje De Espera",
-        text: "Espere un momento por favor.",
-        icon: "info",
-        timer: 10000
-    });
+function DocentAsignado() {
+  const id_carga = $('#cicloa').val();             // (tu combo ciclos dice que es id_carga)
+  const id_doce  = $("#id_docent").val();          // id docente real
+  const id_coodi = $("#textId").val() || $("#textId_co").val() || $("#textIdCoor").val() || "";
+  const anio     = $('#anio').val();               // NO uses var global "sem" aquí
 
+  if (!id_carga) return Swal.fire("Advertencia", "Seleccione un ciclo/carga.", "warning");
+  if (!id_doce)  return Swal.fire("Advertencia", "No se detectó el docente.", "warning");
+  if (!id_coodi) return Swal.fire("Advertencia", "No se detectó el ID del coordinador.", "warning");
 
-    $.ajax({
-        url: '../controlador/coordinador/controlador_cursogrado_docente.php',
-        type: 'POST',
-        data: {
-            id_carga: idciclos,
-            id_doce: id_doce,
-            id_coodi: id_coodi,
-            anio: sem
-        }
-    }).done(function (resp) {
+  const btnsubir = document.getElementById('subirasigbtn');
+  if (btnsubir) btnsubir.disabled = true;
 
-        if (resp == 1) {
-            docentecargo.ajax.reload();
-            Swal.fire("Mensaje De Advertencia", "Asignado.", "success")
-        } else if (resp == 555) {
-            Swal.fire("Mensaje De Advertencia", "Este docente ya tiene alumnos asignados.", "info")
-        } else {
-            Swal.fire("Mensaje De Advertencia", "No se pudo asignar.", "warning")
-        }
-        btnsubir.disabled = false;
-        $("#modal_agregar_curso").modal('hide');
+  Swal.fire({
+    title: "Mensaje De Espera",
+    text: "Espere un momento por favor.",
+    icon: "info",
+    allowOutsideClick: false,
+    allowEscapeKey: false
+  });
+
+  console.log("ASIGNAR ->", { id_carga, id_doce, id_coodi, anio });
+
+  $.ajax({
+    url: '../controlador/coordinador/controlador_cursogrado_docente.php',
+    type: 'POST',
+    data: { id_carga, id_doce, id_coodi, anio }
+  })
+    .done(function (resp) {
+    var limpio = $.trim(resp);
+    console.log("RESP ASIGNAR ->", limpio);
+
+    if (limpio === "1") {
+        Swal.fire("Éxito", "Asignado.", "success");
+
+        // 🔥 AQUÍ MISMO: recargar la tabla derecha
+        VerCursos_grados_docente($("#id_docent").val());
+
+    } else if (limpio === "555") {
+        Swal.fire("Info", "Este docente ya tiene alumnos asignados.", "info");
+    } else {
+        Swal.fire("Advertencia", "No se pudo asignar.", "warning");
+    }
+
+    btnsubir.disabled = false;
+    $("#modal_agregar_curso").modal('hide');
     })
+
+  .fail(function(xhr){
+    console.error("ERROR ASIGNAR -> status:", xhr.status);
+    console.error("responseText ->", xhr.responseText); // AQUÍ saldrá el error real del PHP (SQL, etc.)
+    Swal.fire("Error", "Falló la asignación. Revisa consola (Network/response).", "error");
+  })
+  .always(function(){
+    if (btnsubir) btnsubir.disabled = false;
+  });
 }
+
 //ANTIGO EJEMPLO  CON MODAL
 /*
 function VerCursos_grados_docente(id) { 
@@ -538,51 +557,50 @@ var docentecargo;
 
 function VerCursos_grados_docente(iddd) {
 
-    $('#tablasAsignados').show();
-    docentecargo = $("#tablasAsignados").DataTable({
-        "ordering": false,
-        "bLengthChange": false,
-        "searching": {
-            "regex": false
-        },
-        "lengthMenu": [
-            [10, 25, 50, 100, -1],
-            [10, 25, 50, 100, "All"]
-        ],
-        "pageLength": 10,
-        "destroy": true,
-        "async": false,
-        "processing": true,
-        "ajax": {
-            "url": '../controlador/coordinador/controlador_verGradocurso.php',
-            type: 'POST',
-            data:
-            {
-                id_usuario: iddd,
-                anio: sem
-            }
-        },
-        "columns": [{
-            "data": "id_asignacion"
-        },
-        {
-            "data": "estudiante_es"
-        }, {
-            "defaultContent": "<button style='font-size:13px;' type='button' class='eliminar btn btn-danger'\
-             title='eliminar'><i class='fa fa-trash'></i></button>"
-        }],
-        "language": idioma_espanol,
-        select: true
+  $('#tablasAsignados').show();
 
-    });
-    document.getElementById("tablasAsignados_filter").style.display = "none";
-    $('input.global_filter').on('keyup click', function () {
-        filterGlobal();
-    });
-    $('input.column_filter').on('keyup click', function () {
-        filterColumn($(this).parents('tr').attr('data-column'));
-    });
+  // 🔥 Evita que DataTables se duplique/rompa
+  if ($.fn.DataTable.isDataTable('#tablasAsignados')) {
+    $('#tablasAsignados').DataTable().clear().destroy();
+    $('#tablasAsignados tbody').empty();
+  }
+
+  docentecargo = $("#tablasAsignados").DataTable({
+    ordering: false,
+    bLengthChange: false,
+    searching: { regex: false },
+    lengthMenu: [[10, 25, 50, 100, -1],[10, 25, 50, 100, "All"]],
+    pageLength: 10,
+    destroy: true,
+    processing: true,
+    ajax: {
+    url: '../controlador/coordinador/controlador_verGradocurso.php',
+    type: 'POST',
+    data: {
+        id_usuario: iddd,
+        anio: getSemestre()
+    }
+    },
+    columns: [
+      { data: "id_asignacion" },
+      { data: "estudiante_es" },
+      {
+        defaultContent:
+          "<button style='font-size:13px;' type='button' class='eliminar btn btn-danger' title='eliminar'><i class='fa fa-trash'></i></button>"
+      }
+    ],
+    language: idioma_espanol,
+    select: true
+  });
+
+  const f = document.getElementById("tablasAsignados_filter");
+  if (f) f.style.display = "none";
+
+  setTimeout(function(){
+    $('#tablasAsignados').DataTable().columns.adjust().draw(false);
+  }, 50);
 }
+
 
 
 $('#tablasAsignados').on('click', '.eliminar', function () {

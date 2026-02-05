@@ -195,50 +195,127 @@
 		}
 
  
- function VerificarDocenteAsignado($id_carga,$id_doce) {
-			$sql=   "SELECT id_carga FROM tutoria_asignacion_tutoria WHERE id_docente = '$id_doce' AND id_carga = '$id_carga'";
-	        
-	      	if ($consulta = $this->conexion->conexion->query($sql)) {
-	      		if ($consulta->num_rows > 0) {
-			        return 1;
-			    } else {
-			        return 0;
-			    }
-		    }else{
-		        return 0;
-		    }
+		public function ExisteTutoriaAsignacion($id_carga, $id_doce, $id_semestre) {
+		try {
+			$sql = "SELECT COUNT(*) AS c
+					FROM tutoria_asignacion_tutoria
+					WHERE id_carga = ? AND id_docente = ? AND id_semestre = ?";
+
+			$stmt = $this->conexion->conexion->prepare($sql);
+			if (!$stmt) return 0;
+
+			$stmt->bind_param("iii", $id_carga, $id_doce, $id_semestre);
+			$stmt->execute();
+			$res = $stmt->get_result()->fetch_assoc();
+			return (int)($res['c'] ?? 0);
+		} catch (Throwable $e) {
+			return 0;
+		}
 		}
 
-		function Docente_Asignado($id_carga,$id_doce,$id_coodi) {
-		    try {
-		        // Preparar la consulta
-		        $sql = "CALL InsertarAsignacionTutoria_tuto(?, ?, ?)";
-		        $stmt = $this->conexion->conexion->prepare($sql);
 
-		        // Vincular los parámetros
-		        $stmt->bind_param("iii", $id_carga, $id_doce, $id_coodi);
+		public function InsertarTutoriaAsignacionMasiva($id_carga, $id_doce, $id_coodi, $id_semestre) {
+		try {
+			// 1) Contar alumnos en asignacion_estudiante para esa carga/semestre
+			$sqlCheck = "SELECT COUNT(*) AS c
+						FROM asignacion_estudiante
+						WHERE id_cargalectiva = ? AND id_semestre = ?";
 
-		        // Ejecutar la consulta
-		        if ($stmt->execute()) {
-		            return 1; // Éxito
-		        } else {
-		            // Manejo de error
-		            return 0; // Error
-		        }
-		    } catch (Exception $e) {
-		        // Manejo de excepciones
-		        return 0; // Error
-		    }
-/*
-		    $sql=   "CALL InsertarAsignacionTutoria((3492, 544, 4)";
-	        
-	      	if ($consulta = $this->conexion->conexion->query($sql)) {
-		        return 1; 
-		    }else{
-		        return 600;
-		    }*/
+			$stc = $this->conexion->conexion->prepare($sqlCheck);
+			if (!$stc) return "SQL_ERROR: " . $this->conexion->conexion->error;
+
+			$stc->bind_param("ii", $id_carga, $id_semestre);
+			$stc->execute();
+			$row  = $stc->get_result()->fetch_assoc();
+			$cant = (int)($row['c'] ?? 0);
+
+			if ($cant <= 0) {
+			return "0"; // no hay alumnos en esa carga
+			}
+
+			// 2) Insert masivo a tutoria_asignacion_tutoria
+			$tipo = 2;
+
+			$sql = "
+			INSERT INTO tutoria_asignacion_tutoria
+				(id_ficham, id_carga, fecha, tipo_asignacion_id, id_docente, id_estudiante, id_coodinador, seleccionado_estu, id_semestre, id_apoyo)
+			SELECT
+				ae.id_ficham,
+				ae.id_cargalectiva,
+				CURDATE(),
+				?,
+				?,
+				ae.id_estu,
+				?,
+				0,
+				ae.id_semestre,
+				NULL
+			FROM asignacion_estudiante ae
+			WHERE ae.id_cargalectiva = ?
+				AND ae.id_semestre = ?
+			";
+
+			$stmt = $this->conexion->conexion->prepare($sql);
+			if (!$stmt) return "SQL_ERROR: " . $this->conexion->conexion->error;
+
+			// ✅ SON 5 PARAMETROS (no 6)
+			$stmt->bind_param("iiiii", $tipo, $id_doce, $id_coodi, $id_carga, $id_semestre);
+
+			if ($stmt->execute()) {
+			return "1";
+			}
+			return "SQL_ERROR: " . $stmt->error;
+
+		} catch (Throwable $e) {
+			return "PHP_ERROR: " . $e->getMessage();
 		}
-		
+		}
+
+
+		public function Docente_Asignado($id_asi, $id_doce, $semestre, $id_car) {
+		try {
+			// 1) Buscar ciclo y turno desde la carga (AJUSTA el nombre real de tu tabla/columnas)
+			// En tu sistema antes mencionaste "carga_lectiva" y que ahí está ciclo/turno/seccion.
+			$sql1 = "SELECT ciclo, turno
+					FROM carga_lectiva
+					WHERE id_cargalectiva = ?
+					LIMIT 1";
+			$st1 = $this->conexion->conexion->prepare($sql1);
+			if (!$st1) return 0;
+
+			$st1->bind_param("i", $id_asi);
+			$st1->execute();
+			$info = $st1->get_result()->fetch_assoc();
+
+			if (!$info) return 0;
+
+			$ciclo = (string)$info['ciclo'];
+			$turno = (string)$info['turno'];
+
+			// 2) Insertar asignación
+			$estado = "1";
+			$observ = null;
+
+			$sql2 = "INSERT INTO asignacion_docente
+					(id_doce, semestre_doce, turno_doce, ciclo_doce, id_asi, id_car, observacion, estado)
+					VALUES
+					(?, ?, ?, ?, ?, ?, ?, ?)";
+			$st2 = $this->conexion->conexion->prepare($sql2);
+			if (!$st2) return 0;
+
+			$st2->bind_param(
+			"isssiiss",
+			$id_doce, $semestre, $turno, $ciclo, $id_asi, $id_car, $observ, $estado
+			);
+
+			return $st2->execute() ? 1 : 0;
+
+		} catch (Throwable $e) {
+			return 0;
+		}
+		}
+
+
 
 /* 	    function Quitar_Matricula($id_asig){
 	        

@@ -79,7 +79,7 @@ if (session_status() === PHP_SESSION_NONE) {
             <!-- /.box-header -->
             <div class="box-body">
             <div class="form-group">
-                <table id="tablasAsignados" class="display responsive nowrap" style="width:100%" hidden>
+                <table id="tablasAsignados" class="display responsive nowrap" style="width:100%; display:none;">
                 <thead>
                     <tr>
                         <th>Id</th>
